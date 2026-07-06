@@ -25,15 +25,7 @@ class OverlayView(context: Context?, attrs: AttributeSet?) : View(context, attrs
     init {
         initPaints()
     }
-
-    fun clear() {
-        results = listOf()
-        textPaint.reset()
-        textBackgroundPaint.reset()
-        boxPaint.reset()
-        invalidate()
-        initPaints()
-    }
+    
 
     private fun initPaints() {
         textBackgroundPaint.color = Color.BLACK

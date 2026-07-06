@@ -143,6 +143,26 @@ class BleManager(
         Log.d("BLE", "Sent threat: $value")
     }
 
+    fun getStatusText(): String {
+
+        return when(state) {
+
+            BleState.SCANNING ->
+                "🟡 Searching for Handlebar..."
+
+            BleState.CONNECTING ->
+                "🔵 Connecting..."
+
+            BleState.CONNECTED,
+            BleState.READY ->
+                "🟢 Connected to Handlebar"
+
+            else ->
+                "🔴 Handlebar not found"
+        }
+
+    }
+
     private val scanCallback = object : ScanCallback() {
 
         @RequiresPermission(allOf = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT])

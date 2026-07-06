@@ -35,6 +35,9 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private lateinit var binding: ActivityMainBinding
     private val isFrontCamera = false
 
+    private var lastFrameTime = System.currentTimeMillis()
+    private var fps = 0f
+
     private var preview: Preview? = null
     private var imageAnalyzer: ImageAnalysis? = null
     private var camera: Camera? = null
@@ -208,8 +211,18 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     }
 
     override fun onEmptyDetect() {
+
         runOnUiThread {
-            binding.overlay.clear()
+
+            binding.overlay.setResults(emptyList())
+
+            binding.statusText.text =
+                """
+${bleManager.getStatusText()}
+FPS: ${"%.1f".format(fps)}
+Objects: 0
+""".trimIndent()
+
         }
     }
 
@@ -218,6 +231,10 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         boundingBoxes: List<BoundingBox>,
         inferenceTime: Long
     ) {
+
+        val now = System.currentTimeMillis()
+        fps = 1000f / (now - lastFrameTime).coerceAtLeast(1)
+        lastFrameTime = now
 
         val trackedVehicles = vehicleTracker.update(boundingBoxes)
         val displayVehicles = trackedVehicles
@@ -243,12 +260,16 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
         runOnUiThread {
 
-            binding.inferenceTime.text = "${inferenceTime}ms"
-
             binding.overlay.apply {
                 setResults(displayVehicles)
                 invalidate()
             }
+
+            binding.statusText.text =
+                """
+${bleManager.getStatusText()}
+FPS: ${"%.1f".format(fps)} | ${inferenceTime} ms | Objects: ${displayVehicles.size}
+""".trimIndent()
 
         }
 
