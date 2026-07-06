@@ -1,0 +1,212 @@
+# BikeSafetyBLE
+
+This module receives warning levels from the Android Bike Safety app via Bluetooth Low Energy (BLE).
+
+The module is intentionally independent from the rest of the firmware. It only handles BLE communication and stores the most recent threat level.
+
+It **does not** control vibration motors, LEDs, or any other hardware. Those decisions are left to the main ESP32 program.
+
+---
+
+# Requirements
+
+ESP32 running the Arduino framework.
+
+Install the following library in the Arduino IDE:
+
+Library Manager →
+
+**NimBLE-Arduino**
+
+Author:
+h2zero
+
+This library provides the Bluetooth Low Energy (BLE) functionality used by this module.
+
+---
+
+# Files
+
+Copy the following files into your Arduino project:
+
+```
+BikeSafetyBLE.h
+BikeSafetyBLE.cpp
+```
+
+No other files are required.
+
+---
+
+# Usage
+
+Create a global object:
+
+```cpp
+BikeSafetyBLE ble;
+```
+
+In `setup()` initialize BLE:
+
+```cpp
+void setup() {
+
+    Serial.begin(115200);
+
+    ble.begin();
+
+}
+```
+
+In the main loop call:
+
+```cpp
+void loop() {
+
+    ble.update();
+
+}
+```
+
+The current threat level can be read at any time:
+
+```cpp
+ThreatLevel level = ble.getThreatLevel();
+```
+
+or directly:
+
+```cpp
+switch (ble.getThreatLevel()) {
+
+    case ThreatLevel::SAFE:
+        // no warning
+        break;
+
+    case ThreatLevel::APPROACHING:
+        // approaching vehicle
+        break;
+
+    case ThreatLevel::DANGER:
+        // immediate warning
+        break;
+
+}
+```
+
+The BLE module automatically keeps this value updated.
+
+---
+
+# Bluetooth behaviour
+
+After startup the ESP32 starts advertising itself as
+
+```
+BikeSafetyESP
+```
+
+The Android application automatically searches for this device.
+
+Once connected, the Android app sends one byte whenever the warning level changes.
+
+If the phone disconnects, the ESP automatically starts advertising again.
+
+If no valid BLE message has been received for several seconds, the module automatically returns to
+
+```
+SAFE
+```
+
+to prevent stale warning states.
+
+---
+
+# BLE Protocol
+
+Device Name
+
+```
+BikeSafetyESP
+```
+
+Service UUID
+
+```
+12345678-1234-1234-1234-1234567890ab
+```
+
+Characteristic UUID
+
+```
+87654321-4321-4321-4321-ba0987654321
+```
+
+Payload:
+
+| Value | Meaning |
+|-------:|---------|
+| 0 | SAFE |
+| 1 | APPROACHING |
+| 2 | DANGER |
+
+Only a single byte is transmitted.
+
+---
+
+# Public API
+
+The module exposes only four functions.
+
+```cpp
+ble.begin();
+```
+
+Starts BLE advertising.
+
+```cpp
+ble.update();
+```
+
+Must be called every loop iteration.
+
+```cpp
+ble.getThreatLevel();
+```
+
+Returns the most recently received threat level.
+
+```cpp
+ble.isConnected();
+```
+
+Returns whether a phone is currently connected.
+
+---
+
+# Serial Output
+
+The module prints useful debug information over Serial.
+
+Examples:
+
+```
+BikeSafetyBLE started
+Advertising...
+Phone connected
+Threat: 1
+Threat: 2
+Phone disconnected
+```
+
+These messages are intended to simplify debugging.
+
+---
+
+# Notes
+
+The BLE module only receives warning levels.
+
+It deliberately contains **no** motor control, LED control or application logic.
+
+This separation keeps the BLE communication reusable and easy to integrate into larger projects.
