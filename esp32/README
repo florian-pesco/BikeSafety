@@ -1,212 +1,107 @@
-# BikeSafetyBLE
+# BikeSafetyESP BLE Receiver
 
-This module receives warning levels from the Android Bike Safety app via Bluetooth Low Energy (BLE).
+This folder contains the simplest ESP32 BLE test firmware for the bicycle safety prototype.
 
-The module is intentionally independent from the rest of the firmware. It only handles BLE communication and stores the most recent threat level.
+It uses the official ESP32 Arduino BLE library, not NimBLE.
 
-It **does not** control vibration motors, LEDs, or any other hardware. Those decisions are left to the main ESP32 program.
+## Hardware
 
----
+- ESP32-WROOM-32E
+- Arduino IDE
+- ESP32 Arduino Core 3.3.10
 
-# Requirements
+## What It Does
 
-ESP32 running the Arduino framework.
+The ESP32:
 
-Install the following library in the Arduino IDE:
+- advertises as `BikeSafetyESP`
+- accepts one BLE connection
+- exposes one writable characteristic
+- receives exactly one byte from the Android app
+- prints the decoded value to Serial
 
-Library Manager →
+It does not control vibration motors, LEDs, or any other hardware.
 
-**NimBLE-Arduino**
+## BLE Protocol
 
-Author:
-h2zero
+Service UUID:
 
-This library provides the Bluetooth Low Energy (BLE) functionality used by this module.
-
----
-
-# Files
-
-Copy the following files into your Arduino project:
-
-```
-BikeSafetyBLE.h
-BikeSafetyBLE.cpp
-```
-
-No other files are required.
-
----
-
-# Usage
-
-Create a global object:
-
-```cpp
-BikeSafetyBLE ble;
-```
-
-In `setup()` initialize BLE:
-
-```cpp
-void setup() {
-
-    Serial.begin(115200);
-
-    ble.begin();
-
-}
-```
-
-In the main loop call:
-
-```cpp
-void loop() {
-
-    ble.update();
-
-}
-```
-
-The current threat level can be read at any time:
-
-```cpp
-ThreatLevel level = ble.getThreatLevel();
-```
-
-or directly:
-
-```cpp
-switch (ble.getThreatLevel()) {
-
-    case ThreatLevel::SAFE:
-        // no warning
-        break;
-
-    case ThreatLevel::APPROACHING:
-        // approaching vehicle
-        break;
-
-    case ThreatLevel::DANGER:
-        // immediate warning
-        break;
-
-}
-```
-
-The BLE module automatically keeps this value updated.
-
----
-
-# Bluetooth behaviour
-
-After startup the ESP32 starts advertising itself as
-
-```
-BikeSafetyESP
-```
-
-The Android application automatically searches for this device.
-
-Once connected, the Android app sends one byte whenever the warning level changes.
-
-If the phone disconnects, the ESP automatically starts advertising again.
-
-If no valid BLE message has been received for several seconds, the module automatically returns to
-
-```
-SAFE
-```
-
-to prevent stale warning states.
-
----
-
-# BLE Protocol
-
-Device Name
-
-```
-BikeSafetyESP
-```
-
-Service UUID
-
-```
+```text
 12345678-1234-1234-1234-1234567890ab
 ```
 
-Characteristic UUID
+Characteristic UUID:
 
-```
+```text
 87654321-4321-4321-4321-ba0987654321
 ```
 
 Payload:
 
-| Value | Meaning |
-|-------:|---------|
-| 0 | SAFE |
-| 1 | APPROACHING |
-| 2 | DANGER |
+| Value | Serial Output |
+| ----: | ------------- |
+| 0 | `SAFE` |
+| 1 | `APPROACHING` |
+| 2 | `DANGER` |
 
-Only a single byte is transmitted.
+The Android app should send one byte whenever the threat level changes.
 
----
+## How To Use
 
-# Public API
+Open `example.ino` in the Arduino IDE and upload it to the ESP32.
 
-The module exposes only four functions.
+Use these serial monitor settings:
 
-```cpp
-ble.begin();
+- baud rate: `115200`
+- line ending: any
+
+Expected startup output:
+
+```text
+Boot
+Initializing BLE
+BLE initialized
+Creating server
+Server created
+Creating service
+Service created
+Creating characteristic
+Characteristic created
+Starting service
+Service started
+Starting advertising
+Advertising started as BikeSafetyESP
+Waiting for phone...
+READY
 ```
 
-Starts BLE advertising.
+Expected output after Android writes threat values:
 
-```cpp
-ble.update();
+```text
+Connected
+Characteristic written
+Payload received, length=1
+Raw byte: 0
+Threat decoded: SAFE
+Characteristic written
+Payload received, length=1
+Raw byte: 1
+Threat decoded: APPROACHING
+Characteristic written
+Payload received, length=1
+Raw byte: 2
+Threat decoded: DANGER
 ```
 
-Must be called every loop iteration.
+On disconnect, the ESP32 requests advertising restart and restarts it from `loop()`.
+This keeps the BLE callback small and makes disconnect/reconnect behavior easier to debug.
 
-```cpp
-ble.getThreatLevel();
+## Android Compatibility
+
+The Android app already uses the matching UUIDs in:
+
+```text
+android/YOLOv8-Object-Detector-Android-Tflite/app/src/main/java/com/surendramaran/yolov8tflite/ble/BleConstants.kt
 ```
 
-Returns the most recently received threat level.
-
-```cpp
-ble.isConnected();
-```
-
-Returns whether a phone is currently connected.
-
----
-
-# Serial Output
-
-The module prints useful debug information over Serial.
-
-Examples:
-
-```
-BikeSafetyBLE started
-Advertising...
-Phone connected
-Threat: 1
-Threat: 2
-Phone disconnected
-```
-
-These messages are intended to simplify debugging.
-
----
-
-# Notes
-
-The BLE module only receives warning levels.
-
-It deliberately contains **no** motor control, LED control or application logic.
-
-This separation keeps the BLE communication reusable and easy to integrate into larger projects.
+Do not change these UUIDs unless you change both Android and ESP32 together.

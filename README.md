@@ -35,9 +35,8 @@ The focus of this project is validating the complete sensing and communication p
 - Automatic advertising
 - Automatic reconnection
 - Receives threat levels from Android
-- Timeout protection
-- Clean reusable BLE module
-- Easy integration into existing firmware
+- Detailed Serial debug output
+- Minimal one-file receiver sketch
 
 ---
 
@@ -91,8 +90,6 @@ Only a single byte is transmitted whenever the warning level changes.
 │   └── ...
 │
 ├── esp32/
-│   ├── BikeSafetyBLE.h
-│   ├── BikeSafetyBLE.cpp
 │   ├── README.md
 │   └── example.ino
 │
@@ -115,8 +112,7 @@ Only a single byte is transmitted whenever the warning level changes.
 ## ESP32 Technologies
 
 - Arduino Framework
-- NimBLE-Arduino
-- ESP32 BLE
+- Official ESP32 Arduino BLE library
 
 ---
 
@@ -136,26 +132,14 @@ or build a debug APK directly from Android Studio.
 
 ## ESP32 Setup
 
-Install the following Arduino library:
+Open and upload
 
 ```
-NimBLE-Arduino
+esp32/example.ino
 ```
 
-by **h2zero**
-
-Copy
-
-```
-BikeSafetyBLE.h
-BikeSafetyBLE.cpp
-```
-
-into your Arduino project and follow the instructions in
-
-```
-esp32/README.md
-```
+with the Arduino IDE. The sketch uses the BLE library included with the ESP32
+Arduino Core, not NimBLE. More details are in `esp32/README`.
 
 ---
 
