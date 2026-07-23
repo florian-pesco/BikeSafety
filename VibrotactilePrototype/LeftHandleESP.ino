@@ -73,7 +73,8 @@ enum Scenario : uint8_t {
   SCENARIO_MOTOR_TEST = 1,
   SCENARIO_OVERTAKE = 2,
   SCENARIO_DOORING = 3,
-  SCENARIO_RIGHT_TURN = 4
+  SCENARIO_RIGHT_TURN = 4,
+  SCENARIO_APP_THREAT = 5
 };
 
 enum DangerSide : uint8_t {
@@ -430,6 +431,54 @@ bool playAllMotorPulseStage(
   return true;
 }
 
+void playAppThreat(
+  uint8_t threatLevel,
+  uint32_t generationAtStart
+) {
+  if (threatLevel == 1) {
+    Serial.println("App-Warnung: APPROACHING");
+
+    while (commandGeneration == generationAtStart) {
+      setAllMotors(intensityLow);
+
+      if (!waitInterruptible(220, generationAtStart)) {
+        return;
+      }
+
+      stopAllMotors();
+
+      if (!waitInterruptible(780, generationAtStart)) {
+        return;
+      }
+    }
+
+    return;
+  }
+
+  if (threatLevel == 2) {
+    Serial.println("App-Warnung: DANGER");
+
+    while (commandGeneration == generationAtStart) {
+      setAllMotors(intensityHigh);
+
+      if (!waitInterruptible(360, generationAtStart)) {
+        return;
+      }
+
+      stopAllMotors();
+
+      if (!waitInterruptible(180, generationAtStart)) {
+        return;
+      }
+    }
+
+    return;
+  }
+
+  Serial.println("App-Warnung: unbekannte Stufe");
+  stopAllMotors();
+}
+
 void playRightTurn(uint32_t generationAtStart) {
   Serial.println(
     "Rechtsabbieger: linker Griff folgt verzögert"
@@ -535,6 +584,13 @@ void executeCommand(
 
     case SCENARIO_RIGHT_TURN:
       playRightTurn(generationAtStart);
+      break;
+
+    case SCENARIO_APP_THREAT:
+      playAppThreat(
+        side,
+        generationAtStart
+      );
       break;
 
     default:

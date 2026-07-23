@@ -5,13 +5,10 @@ import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.os.Build
 import android.os.Bundle
-import android.os.Message
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
@@ -23,12 +20,13 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.surendramaran.yolov8tflite.Constants.LABELS_PATH
 import com.surendramaran.yolov8tflite.Constants.MODEL_PATH
+import com.surendramaran.yolov8tflite.tracker.ThreatLevel
 import com.surendramaran.yolov8tflite.tracker.VehicleTracker
+import com.surendramaran.yolov8tflite.wifi.WifiEspManager
 import yolov8tflite.R
 import yolov8tflite.databinding.ActivityMainBinding
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import com.surendramaran.yolov8tflite.ble.BleManager
 import androidx.core.graphics.createBitmap
 
 class MainActivity : AppCompatActivity(), Detector.DetectorListener {
@@ -44,15 +42,14 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     private var cameraProvider: ProcessCameraProvider? = null
     private var detector: Detector? = null
     private val vehicleTracker = VehicleTracker()
-    private lateinit var bleManager: BleManager
+    private lateinit var wifiEspManager: WifiEspManager
     private lateinit var cameraExecutor: ExecutorService
 
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        bleManager = BleManager(this)
+        wifiEspManager = WifiEspManager(this)
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -66,13 +63,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
             startCamera()
         } else {
             ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS)
-        }
-
-        if (bleManager.isBluetoothEnabled()) {
-            Log.d("BLE", "Bluetooth enabled")
-            bleManager.startScan()
-        } else {
-            Log.d("BLE", "Bluetooth disabled")
         }
 
         bindListeners()
@@ -166,7 +156,6 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
@@ -185,10 +174,10 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     override fun onDestroy() {
         super.onDestroy()
         detector?.close()
+        wifiEspManager.shutdown()
         cameraExecutor.shutdown()
     }
 
-    @RequiresApi(Build.VERSION_CODES.S)
     override fun onResume() {
         super.onResume()
         if (allPermissionsGranted()){
@@ -201,16 +190,14 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
     companion object {
         private const val TAG = "Camera"
         private const val REQUEST_CODE_PERMISSIONS = 10
-        @RequiresApi(Build.VERSION_CODES.S)
         private val REQUIRED_PERMISSIONS = mutableListOf (
-            Manifest.permission.CAMERA,
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.ACCESS_FINE_LOCATION
+            Manifest.permission.CAMERA
         ).toTypedArray()
     }
 
     override fun onEmptyDetect() {
+
+        wifiEspManager.sendThreat(ThreatLevel.SAFE)
 
         runOnUiThread {
 
@@ -218,7 +205,7 @@ class MainActivity : AppCompatActivity(), Detector.DetectorListener {
 
             binding.statusText.text =
                 """
-${bleManager.getStatusText()}
+${wifiEspManager.getStatusText()}
 FPS: ${"%.1f".format(fps)}
 Objects: 0
 """.trimIndent()
@@ -237,6 +224,13 @@ Objects: 0
         lastFrameTime = now
 
         val trackedVehicles = vehicleTracker.update(boundingBoxes)
+        val strongestThreat =
+            trackedVehicles.maxByOrNull { it.threatLevel.priority() }
+                ?.threatLevel
+                ?: ThreatLevel.SAFE
+
+        wifiEspManager.sendThreat(strongestThreat)
+
         val displayVehicles = trackedVehicles
             .sortedByDescending { it.box.w * it.box.h }
             .take(1)
@@ -267,11 +261,19 @@ Objects: 0
 
             binding.statusText.text =
                 """
-${bleManager.getStatusText()}
+${wifiEspManager.getStatusText()}
+Threat: ${strongestThreat.name}
 FPS: ${"%.1f".format(fps)} | ${inferenceTime} ms | Objects: ${displayVehicles.size}
 """.trimIndent()
 
         }
 
     }
+
+    private fun ThreatLevel.priority(): Int =
+        when (this) {
+            ThreatLevel.SAFE -> 0
+            ThreatLevel.APPROACHING -> 1
+            ThreatLevel.DANGER -> 2
+        }
 }

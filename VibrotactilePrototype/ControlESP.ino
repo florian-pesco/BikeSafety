@@ -55,7 +55,8 @@ enum Scenario : uint8_t {
   SCENARIO_MOTOR_TEST = 1,
   SCENARIO_OVERTAKE = 2,
   SCENARIO_DOORING = 3,
-  SCENARIO_RIGHT_TURN = 4
+  SCENARIO_RIGHT_TURN = 4,
+  SCENARIO_APP_THREAT = 5
 };
 
 enum DangerSide : uint8_t {
@@ -74,9 +75,12 @@ struct ControlMessage {
 // ------------------------------------------------------------
 
 String currentAction = "Ready";
+uint8_t currentThreatLevel = 0;
+uint8_t lastForwardedThreatLevel = 255;
 
 void handleRoot();
 void handleStatus();
+void handleThreat();
 
 // ------------------------------------------------------------
 // ESP-NOW
@@ -142,6 +146,69 @@ void sendCommand(
 
   Serial.print("Right queued: ");
   Serial.println(rightSent ? "yes" : "no");
+}
+
+const char* threatLabel(uint8_t level) {
+  switch (level) {
+    case 0:
+      return "SAFE";
+
+    case 1:
+      return "APPROACHING";
+
+    case 2:
+      return "DANGER";
+
+    default:
+      return "INVALID";
+  }
+}
+
+void applyThreatLevel(uint8_t level) {
+  Serial.println();
+  Serial.print("Threat request decoded: ");
+  Serial.print(level);
+  Serial.print(" = ");
+  Serial.println(threatLabel(level));
+
+  currentThreatLevel = level;
+
+  if (level == lastForwardedThreatLevel) {
+    Serial.println("Threat unchanged, no ESP-NOW command sent");
+    return;
+  }
+
+  lastForwardedThreatLevel = level;
+
+  switch (level) {
+    case 0:
+      sendCommand(
+        SCENARIO_STOP,
+        SIDE_NONE,
+        "SAFE"
+      );
+      break;
+
+    case 1:
+      sendCommand(
+        SCENARIO_APP_THREAT,
+        1,
+        "APPROACHING"
+      );
+      break;
+
+    case 2:
+      sendCommand(
+        SCENARIO_APP_THREAT,
+        2,
+        "DANGER"
+      );
+      break;
+
+    default:
+      Serial.println("Invalid threat ignored");
+      break;
+  }
 }
 
 // ------------------------------------------------------------
@@ -224,6 +291,8 @@ void registerApiRoutes() {
   });
 
   server.on("/api/status", HTTP_GET, handleStatus);
+  server.on("/api/threat", HTTP_POST, handleThreat);
+  server.on("/api/threat", HTTP_GET, handleThreat);
 }
 
 // ------------------------------------------------------------
@@ -245,8 +314,13 @@ void setup() {
   Serial.println("Wi-Fi started");
   Serial.print("Network: ");
   Serial.println(ssid);
+  Serial.print("Password: ");
+  Serial.println(password);
   Serial.print("Browser: http://");
   Serial.println(WiFi.softAPIP());
+  Serial.print("Android threat endpoint: http://");
+  Serial.print(WiFi.softAPIP());
+  Serial.println("/api/threat?level=0");
   Serial.print("Channel: ");
   Serial.println(WiFi.channel());
 
@@ -288,9 +362,48 @@ void loop() {
 void handleStatus() {
   String json = "{\"action\":\"";
   json += currentAction;
-  json += "\"}";
+  json += "\",\"threat\":";
+  json += currentThreatLevel;
+  json += "}";
 
   server.send(200, "application/json", json);
+}
+
+void handleThreat() {
+  Serial.println();
+  Serial.println("HTTP /api/threat");
+  Serial.print("Client: ");
+  Serial.println(server.client().remoteIP());
+
+  if (!server.hasArg("level")) {
+    Serial.println("Missing query parameter: level");
+    server.send(400, "text/plain", "MISSING_LEVEL");
+    return;
+  }
+
+  String rawLevel = server.arg("level");
+
+  Serial.print("Raw level: ");
+  Serial.println(rawLevel);
+
+  if (
+    rawLevel != "0" &&
+    rawLevel != "1" &&
+    rawLevel != "2"
+  ) {
+    Serial.println("Invalid level, expected 0, 1, or 2");
+    server.send(400, "text/plain", "INVALID_LEVEL");
+    return;
+  }
+
+  int level = rawLevel.toInt();
+
+  applyThreatLevel(static_cast<uint8_t>(level));
+
+  String response = "THREAT_";
+  response += threatLabel(static_cast<uint8_t>(level));
+
+  server.send(200, "text/plain", response);
 }
 
 // ------------------------------------------------------------
