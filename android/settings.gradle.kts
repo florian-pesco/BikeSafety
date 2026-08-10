@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "YOLOv8 TfLite"
+rootProject.name = "Bike Safety Prototype"
 include(":app")

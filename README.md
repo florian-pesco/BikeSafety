@@ -1,158 +1,137 @@
 # Bike Safety Prototype
 
-A smartphone-based bicycle safety assistance system that detects vehicles approaching from behind and warns the rider through intuitive haptic feedback.
+This repository contains the digital appendix for a university bicycle safety prototype.
 
-This project was developed as a proof-of-concept to investigate whether a standard Android smartphone can be used as a low-cost rear sensing system for bicycles.
+The prototype uses an Android smartphone as a rear-facing camera system. The app detects vehicles in the camera image, estimates whether the detected vehicle is approaching, and sends the resulting threat level to an ESP32-based handlebar prototype. The ESP32 prototype then forwards commands to left and right handle ESPs that drive vibration patterns.
 
----
+## System Overview
 
-## Project Goal
-
-The objective is to warn cyclists about vehicles approaching from behind without requiring them to look at a display.
-
-The smartphone continuously analyzes the rear camera feed using a real-time object detection model. When an approaching vehicle is detected, the phone communicates the warning to an ESP32 mounted inside the handlebars. The ESP32 then activates vibration motors and LEDs to provide intuitive feedback to the cyclist.
-
-The focus of this project is validating the complete sensing and communication pipeline rather than building a production-ready assistance system.
-
----
-
-## Features
-
-### Android Application
-
-- Live rear camera feed using CameraX
-- Real-time object detection using YOLOv8 TensorFlow Lite
-- Vehicle filtering
-- Lightweight object tracking
-- Threat evaluation based on bounding box growth
-- Bluetooth Low Energy (BLE) communication
-- Automatic BLE reconnection
-- Minimal user interface
-
-### ESP32
-
-- BLE peripheral
-- Automatic advertising
-- Automatic reconnection
-- Receives threat levels from Android
-- Detailed Serial debug output
-- Minimal one-file receiver sketch
-
----
-
-## System Architecture
-
-```
-                 Rear Camera
-                      │
-                      ▼
-              Android Smartphone
-                      │
-               YOLOv8 Detection
-                      │
-               Vehicle Tracking
-                      │
-              Threat Evaluation
-                      │
-          Bluetooth Low Energy
-                      │
-                      ▼
-                   ESP32
-                      │
-        ┌─────────────┴─────────────┐
-        ▼                           ▼
-   Vibration Motors            LED Indicators
+```text
+Android phone camera
+        |
+        v
+YOLO object detection
+        |
+        v
+Vehicle tracking and threat evaluation
+        |
+        v
+WiFi HTTP request
+        |
+        v
+Control ESP32 access point and web server
+        |
+        v
+ESP-NOW
+        |
+        v
+Left and right handle ESP32 vibration patterns
 ```
 
----
+## Current Communication Path
 
-## BLE Communication
+The final prototype uses WiFi, not BLE.
 
-The Android application communicates with the ESP32 using Bluetooth Low Energy.
+The Control ESP creates a WiFi access point:
 
-The protocol intentionally remains extremely small.
+```text
+SSID: BikePrototype
+Password: 12345678
+Control ESP IP: 192.168.4.1
+```
 
-| Value | Meaning |
-|-------:|---------|
+The Android app sends threat changes to:
+
+```text
+POST http://192.168.4.1/api/threat?level=0
+POST http://192.168.4.1/api/threat?level=1
+POST http://192.168.4.1/api/threat?level=2
+```
+
+Threat levels:
+
+| Level | Meaning |
+| ----: | ------- |
 | 0 | SAFE |
 | 1 | APPROACHING |
 | 2 | DANGER |
 
-Only a single byte is transmitted whenever the warning level changes.
-
----
+BLE was tested earlier in the project, but it was removed from this final appendix because the ESP32 BLE initialization was unreliable for the available hardware and time frame.
 
 ## Repository Structure
 
-```
+```text
 .
-├── android/
-│   └── ...
-│
-├── esp32/
-│   ├── README.md
-│   └── example.ino
-│
-└── README.md
+|-- android/
+|   |-- app/
+|   |-- gradle/
+|   |-- build.gradle.kts
+|   |-- settings.gradle.kts
+|   |-- gradlew
+|   |-- gradlew.bat
+|   `-- README.md
+|
+|-- VibrotactilePrototype/
+|   |-- ControlESP.ino
+|   |-- LeftHandleESP.ino
+|   |-- RightHandleESP.ino
+|   `-- README.md
+|
+`-- README.md
 ```
 
----
+## Main Components
 
-## Android Technologies
+### Android App
 
-- Kotlin
-- Android Studio
-- CameraX
-- TensorFlow Lite
-- YOLOv8
-- Bluetooth Low Energy (BLE)
+Located in `android/`.
 
----
+The app:
 
-## ESP32 Technologies
+- opens the rear camera with CameraX
+- runs a TensorFlow Lite YOLO model
+- tracks detected vehicles across frames
+- estimates threat level from bounding box growth
+- sends changed threat levels to the Control ESP over WiFi
+- displays detection and WiFi status on screen
 
-- Arduino Framework
-- Official ESP32 Arduino BLE library
+See `android/README.md` for setup and build instructions.
 
----
+### ESP32 Prototype
 
-## Building the Android App
+Located in `VibrotactilePrototype/`.
 
-Open the Android project in Android Studio.
+The prototype consists of three Arduino sketches:
 
-Run
+- `ControlESP.ino`: creates the WiFi access point, hosts the web interface and HTTP API, forwards commands using ESP-NOW
+- `LeftHandleESP.ino`: receives ESP-NOW commands and plays left handle vibration patterns
+- `RightHandleESP.ino`: receives ESP-NOW commands and plays right handle vibration patterns
 
-```
-Build → Generate Signed Bundle / APK
-```
+See `VibrotactilePrototype/README.md` for flashing and test instructions.
 
-or build a debug APK directly from Android Studio.
+## Quick Test
 
----
+1. Flash `ControlESP.ino` to the Control ESP.
+2. Connect a phone or laptop to the WiFi network `BikePrototype`.
+3. Open the manual control page:
 
-## ESP32 Setup
-
-Open and upload
-
-```
-esp32/example.ino
+```text
+http://192.168.4.1/
 ```
 
-with the Arduino IDE. The sketch uses the BLE library included with the ESP32
-Arduino Core, not NimBLE. More details are in `esp32/README`.
+4. Test the app endpoint in a browser:
 
----
+```text
+http://192.168.4.1/api/threat?level=1
+http://192.168.4.1/api/threat?level=2
+http://192.168.4.1/api/threat?level=0
+```
 
-## Limitations
+5. Watch the Control ESP serial monitor at `115200` baud. It prints every received request and every forwarded ESP-NOW command.
 
-This project is intended as a proof-of-concept.
+## Notes
 
-Current limitations include:
-
-- Monocular camera only
-- Bounding-box based distance estimation
-- No lane estimation
-- No speed estimation
-- No object re-identification across long occlusions
-- No weather or nighttime optimization
-- Android only
+- The Android device must be connected to the `BikePrototype` WiFi network before starting the full app test.
+- Android may warn that the network has no internet. Stay connected to the network anyway.
+- The handle ESP MAC addresses are configured in `ControlESP.ino` and must match the actual handle devices.
+- The project is a proof of concept, not a production safety system.
